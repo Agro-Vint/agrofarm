@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>АгроАИ — Управление контейнерной фермой</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0f0d;
+  --bg2: #0f1610;
+  --bg3: #141e16;
+  --panel: #111a13;
+  --border: #1e2e20;
+  --border2: #243028;
+  --green: #3ddc68;
+  --green2: #2ab54e;
+  --green-dim: #1a4a28;
+  --amber: #f5a623;
+  --amber-dim: #3d2a0a;
+  --red: #e85454;
+  --red-dim: #3d1515;
+  --blue: #4ab8ff;
+  --blue-dim: #0d2a40;
+  --text: #e8f0e9;
+  --text2: #8a9e8c;
+  --text3: #4a5e4c;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Unbounded', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Grid noise texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(61,220,104,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(61,220,104,0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app { position: relative; z-index: 1; padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.logo {
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--green);
+}
+.logo span { color: var(--text2); font-weight: 300; }
+
+.header-center {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text2);
+  background: transparent;
+  transition: all .15s;
+  letter-spacing: .04em;
+}
+.tab.active {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+}
+.tab:hover:not(.active) { border-color: var(--border2); color: var(--text); }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--green);
+  letter-spacing: .04em;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+.clock { font-size: 12px; color: var(--text2); letter-spacing: .06em; }
+
+/* ── METRICS ROW ── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metric {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.metric:hover { border-color: var(--border2); }
+.metric::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--accent, var(--green));
+  opacity: .5;
+}
+.metric.warn::after { --accent: var(--amber); }
+.metric.bad::after { --accent: var(--red); }
+
+.metric-label {
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.metric-val {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.metric-val.ok { color: var(--green); }
+.metric-val.warn { color: var(--amber); }
+.metric-val.bad { color: var(--red); }
+.metric-sub {
+  font-size: 10px;
+  color: var(--text3);
+}
+
+/* ── MAIN GRID ── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.panel-title {
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* chart */
+.chart-wrap { position: relative; height: 140px; }
+canvas { width: 100% !important; }
+
+/* agents */
+.agents { display: flex; flex-direction: column; gap: 6px; }
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.agent-icon { font-size: 15px; flex-shrink: 0; }
+.agent-name { font-size: 11px; color: var(--text); flex: 1; }
+.agent-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: .04em;
+}
+.s-ok { background: var(--green-dim); color: var(--green); }
+.s-warn { background: var(--amber-dim); color: var(--amber); }
+.s-busy { background: var(--blue-dim); color: var(--blue); }
+
+/* ── BOTTOM GRID ── */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* crops */
+.crops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.crop {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.crop:hover { border-color: var(--green); }
+.crop-icon { font-size: 18px; margin-bottom: 3px; }
+.crop-name { font-size: 9px; color: var(--text2); margin-bottom: 2px; }
+.crop-day { font-size: 11px; font-weight: 500; color: var(--text); margin-bottom: 5px; }
+.progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width .5s; }
+
+/* controls */
+.controls { display: flex; flex-direction: column; gap: 8px; }
+.ctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ctrl:last-child { border-bottom: none; }
+.ctrl-label { font-size: 11px; color: var(--text2); width: 80px; flex-shrink: 0; }
+.ctrl-slider { flex: 1; accent-color: var(--green); }
+.ctrl-val { font-size: 11px; color: var(--green); width: 42px; text-align: right; }
+
+.toggles { margin-top: 8px; display: flex; flex-direction: column; gap: 0; }
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { font-size: 11px; color: var(--text2); }
+
+.tog { position: relative; width: 34px; height: 18px; flex-shrink: 0; }
+.tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+.tog-track {
+  position: absolute; inset: 0;
+  border-radius: 9px;
+  background: var(--border2);
+  cursor: pointer;
+  transition: background .2s;
+}
+.tog input:checked + .tog-track { background: var(--green2); }
+.tog-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .2s;
+  pointer-events: none;
+}
+.tog input:checked ~ .tog-thumb { transform: translateX(16px); }
+
+/* events */
+.events { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.event {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  border-left: 2px solid var(--accent-color, var(--border));
+}
+.event.ok { --accent-color: var(--green); }
+.event.warn { --accent-color: var(--amber); }
+.event.bad { --accent-color: var(--red); }
+.event-body { flex: 1; }
+.event-text { font-size: 11px; color: var(--text); line-height: 1.4; margin-bottom: 2px; }
+.event-time { font-size: 10px; color: var(--text3); }
+
+/* scrollbar */
+.events::-webkit-scrollbar { width: 4px; }
+.events::-webkit-scrollbar-track { background: var(--bg); }
+.events::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* watermark */
+.watermark {
+  text-align: center;
+  padding: 16px;
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: .1em;
+}
+
+@media (max-width: 900px) {
+  .metrics { grid-template-columns: repeat(3, 1fr); }
+  .main-grid { grid-template-columns: 1fr; }
+  .bottom-grid { grid-template-columns: 1fr; }
+  .header-center { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="logo">АГРО<span>АИ</span></div>
+    <div class="header-center">
+      <button class="tab active" onclick="switchTab(this,'А')">Контейнер А</button>
+      <button class="tab" onclick="switchTab(this,'Б')">Контейнер Б</button>
+      <button class="tab" onclick="switchTab(this,'В')">Контейнер В</button>
+    </div>
+    <div class="header-right">
+      <div class="status-pill"><span class="status-dot"></span>AI АКТИВЕН</div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- METRICS -->
+  <div class="metrics">
+    <div class="metric" id="m-temp-card">
+      <div class="metric-label">Температура</div>
+      <div class="metric-val ok" id="m-temp">22.4°C</div>
+      <div class="metric-sub">норма 18–24°C</div>
+    </div>
+    <div class="metric" id="m-hum-card">
+      <div class="metric-label">Влажность</div>
+      <div class="metric-val ok" id="m-hum">67%</div>
+      <div class="metric-sub">норма 60–75%</div>
+    </div>
+    <div class="metric warn" id="m-co2-card">
+      <div class="metric-label">CO₂</div>
+      <div class="metric-val warn" id="m-co2">1 240 ppm</div>
+      <div class="metric-sub">рек. &lt;1000 ppm</div>
+    </div>
+    <div class="metric" id="m-ph-card">
+      <div class="metric-label">pH раствора</div>
+      <div class="metric-val ok" id="m-ph">6.1</div>
+      <div class="metric-sub">норма 5.5–6.5</div>
+    </div>
+    <div class="metric" id="m-ec-card">
+      <div class="metric-label">EC раствора</div>
+      <div class="metric-val ok" id="m-ec">1.8 мСм/см</div>
+      <div class="metric-sub">норма 1.5–2.2</div>
+    </div>
+    <div class="metric" id="m-temp-sol-card">
+      <div class="metric-label">t° раствора</div>
+      <div class="metric-val ok" id="m-temp-sol">20.1°C</div>
+      <div class="metric-sub">норма 18–22°C</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-title">Температура воздуха — 24 ч</div>
+      <div class="chart-wrap">
+        <canvas id="tempChart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">AI агенты</div>
+      <div class="agents">
+        <div class="agent">
+          <span class="agent-icon">🌡</span>
+          <span class="agent-name">Агент климата</span>
+          <span class="agent-status s-ok">работает</span>
+        </div>
+        <div class="agent">
+          <span class="agent-icon">💧</span>
+          <span class="agent-name">Агент полива</span>
+          <span class="agent-status s-ok">работает</span>
+        </div>
+        <div class="agent">
+          <span class="agent-icon">💡</span>
+          <span class="agent-name">Агент освещения</span>
+          <span class="agent-status s-ok">работает</span>
+        </div>
+        <div class="agent">
+          <span class="agent-icon">👁</span>
+          <span class="agent-name">Агент зрения</span>
+          <span class="agent-status s-busy">анализирует</span>
+        </div>
+        <div class="agent">
+          <span class="agent-icon">📊</span>
+          <span class="agent-name">Агент урожая</span>
+          <span class="agent-status s-ok">работает</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM GRID -->
+  <div class="bottom-grid">
+
+    <!-- CROPS -->
+    <div class="panel">
+      <div class="panel-title">Культуры — текущий цикл</div>
+      <div class="crops">
+        <div class="crop">
+          <div class="crop-icon">🌿</div>
+          <div class="crop-name">Базилик</div>
+          <div class="crop-day">День 18</div>
+          <div class="progress"><div class="progress-fill" style="width:60%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🥬</div>
+          <div class="crop-name">Рукола</div>
+          <div class="crop-day">День 24</div>
+          <div class="progress"><div class="progress-fill" style="width:80%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🥗</div>
+          <div class="crop-name">Лолло Росса</div>
+          <div class="crop-day">День 20</div>
+          <div class="progress"><div class="progress-fill" style="width:57%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🌱</div>
+          <div class="crop-name">Горох мкз.</div>
+          <div class="crop-day">День 7</div>
+          <div class="progress"><div class="progress-fill" style="width:70%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🫛</div>
+          <div class="crop-name">Лук перо</div>
+          <div class="crop-day">День 30</div>
+          <div class="progress"><div class="progress-fill" style="width:75%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🥬</div>
+          <div class="crop-name">Шпинат</div>
+          <div class="crop-day">День 16</div>
+          <div class="progress"><div class="progress-fill" style="width:53%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🌿</div>
+          <div class="crop-name">Петрушка</div>
+          <div class="crop-day">День 22</div>
+          <div class="progress"><div class="progress-fill" style="width:44%"></div></div>
+        </div>
+        <div class="crop">
+          <div class="crop-icon">🌿</div>
+          <div class="crop-name">Мята</div>
+          <div class="crop-day">День 35</div>
+          <div class="progress"><div class="progress-fill" style="width:87%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="panel">
+      <div class="panel-title">Ручное управление</div>
+      <div class="controls">
+        <div class="ctrl">
+          <span class="ctrl-label">Освещение</span>
+          <input class="ctrl-slider" type="range" min="0" max="100" value="80"
+            oninput="this.nextElementSibling.textContent=this.value+'%'">
+          <span class="ctrl-val">80%</span>
+        </div>
+        <div class="ctrl">
+          <span class="ctrl-label">Вентиляция</span>
+          <input class="ctrl-slider" type="range" min="0" max="100" value="45"
+            oninput="this.nextElementSibling.textContent=this.value+'%'">
+          <span class="ctrl-val">45%</span>
+        </div>
+        <div class="ctrl">
+          <span class="ctrl-label">Обогрев</span>
+          <input class="ctrl-slider" type="range" min="15" max="30" value="22"
+            oninput="this.nextElementSibling.textContent=this.value+'°C'">
+          <span class="ctrl-val">22°C</span>
+        </div>
+      </div>
+      <div class="toggles">
+        <div class="toggle-row">
+          <span class="toggle-label">Автополив</span>
+          <label class="tog"><input type="checkbox" checked><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">AI-автопилот</span>
+          <label class="tog"><input type="checkbox" checked><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Ночной тариф</span>
+          <label class="tog"><input type="checkbox" checked><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENTS -->
+    <div class="panel">
+      <div class="panel-title">Лента событий</div>
+      <div class="events" id="events">
+        <div class="event warn">
+          <div class="event-body">
+            <div class="event-text">AI климата: CO₂ выше нормы — вентиляция увеличена на 20%</div>
+            <div class="event-time">3 мин назад</div>
+          </div>
+        </div>
+        <div class="event ok">
+          <div class="event-body">
+            <div class="event-text">Агент урожая: рукола готова к срезке через 2–3 дня. Прогноз 1.8 кг</div>
+            <div class="event-time">21 мин назад</div>
+          </div>
+        </div>
+        <div class="event ok">
+          <div class="event-body">
+            <div class="event-text">Цикл полива завершён. Расход раствора 3.8 л. pH после — 6.1</div>
+            <div class="event-time">1 ч назад</div>
+          </div>
+        </div>
+        <div class="event ok">
+          <div class="event-body">
+            <div class="event-text">Освещение переключено на ночной тариф. Экономия ~18%</div>
+            <div class="event-time">2 ч назад</div>
+          </div>
+        </div>
+        <div class="event bad">
+          <div class="event-body">
+            <div class="event-text">Агент зрения: пожелтение листьев секция B2 — рекомендована проверка EC</div>
+            <div class="event-time">4 ч назад</div>
+          </div>
+        </div>
+        <div class="event ok">
+          <div class="event-body">
+            <div class="event-text">EC скорректирован: 1.6 → 1.8 мСм/см. Норма восстановлена</div>
+            <div class="event-time">5 ч назад</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="watermark">АГРОАИ · СЕТЬ КОНТЕЙНЕРНЫХ ФЕРМ · САНКТ-ПЕТЕРБУРГ · СЕСТРОРЕЦК</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+// Clock
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Tab switching
+function switchTab(el, name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Chart
+const labels = Array.from({length:24}, (_,i) => i+':00');
+const temps = [19.2,18.9,18.7,18.5,18.4,18.6,19.1,19.8,20.5,21.2,21.9,22.4,22.7,22.6,22.4,22.2,22.0,21.8,21.5,21.2,20.9,20.6,20.3,19.8];
+
+const ctx = document.getElementById('tempChart').getContext('2d');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      data: temps,
+      borderColor: '#3ddc68',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.4,
+      fill: true,
+      backgroundColor: 'rgba(61,220,104,0.06)'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: {
+      backgroundColor: '#111a13',
+      borderColor: '#1e2e20',
+      borderWidth: 1,
+      titleColor: '#8a9e8c',
+      bodyColor: '#3ddc68',
+      titleFont: { family: 'JetBrains Mono', size: 10 },
+      bodyFont: { family: 'JetBrains Mono', size: 12 },
+      callbacks: { label: c => c.raw.toFixed(1) + '°C' }
+    }},
+    scales: {
+      x: {
+        ticks: { color: '#4a5e4c', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 8 },
+        grid: { color: 'rgba(61,220,104,0.05)' }
+      },
+      y: {
+        ticks: { color: '#4a5e4c', font: { family: 'JetBrains Mono', size: 10 }, callback: v => v + '°' },
+        grid: { color: 'rgba(61,220,104,0.05)' },
+        min: 17, max: 25
+      }
+    }
+  }
+});
+
+// Live metrics update
+const metrics = [
+  { id: 'm-temp', base: 22.4, delta: 0.3, suffix: '°C', lo: 18, hi: 24, card: 'm-temp-card' },
+  { id: 'm-hum',  base: 67,   delta: 3,   suffix: '%',  lo: 60, hi: 75, card: 'm-hum-card' },
+  { id: 'm-co2',  base: 1240, delta: 40,  suffix: ' ppm', lo: 0, hi: 1000, card: 'm-co2-card', fmt: v => v.toLocaleString('ru') },
+  { id: 'm-ph',   base: 6.1,  delta: 0.15,suffix: '',   lo: 5.5, hi: 6.5, card: 'm-ph-card' },
+  { id: 'm-ec',   base: 1.8,  delta: 0.1, suffix: ' мСм/см', lo: 1.5, hi: 2.2, card: 'm-ec-card' },
+  { id: 'm-temp-sol', base: 20.1, delta: 0.2, suffix: '°C', lo: 18, hi: 22, card: 'm-temp-sol-card' },
+];
+
+setInterval(() => {
+  metrics.forEach(m => {
+    const raw = m.base + (Math.random() - 0.5) * m.delta * 2;
+    const val = Math.round(raw * 10) / 10;
+    const el = document.getElementById(m.id);
+    const card = document.getElementById(m.card);
+    const display = m.fmt ? m.fmt(Math.round(raw)) + m.suffix : val + m.suffix;
+    el.textContent = display;
+
+    const bad = m.id === 'm-co2' ? raw > m.hi : (raw < m.lo || raw > m.hi);
+    const warn = m.id === 'm-co2' ? raw > 900 : false;
+
+    el.className = 'metric-val ' + (bad ? 'bad' : warn ? 'warn' : 'ok');
+    card.className = 'metric ' + (bad ? 'bad' : warn ? 'warn' : '');
+  });
+}, 3000);
+</script>
+</body>
+</html>
